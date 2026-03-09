@@ -38,7 +38,7 @@ final class MapCodecProviderTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Codec<Map<String, Object>> codec = (Codec<Map<String, Object>>) (Codec) provider.get(Map.class, Bson.DEFAULT_CODEC_REGISTRY);
         assertTrue(codec instanceof MapCodec);
-        MapCodec<Map<String, Object>> recordCodec = (MapCodec<Map<String, Object>>) codec;
+        MapCodec<String, Map<String, Object>> recordCodec = (MapCodec<String, Map<String, Object>>) codec;
         assertEquals(Map.class, recordCodec.getEncoderClass());
     }
 
@@ -47,7 +47,7 @@ final class MapCodecProviderTest {
         @SuppressWarnings({"rawtypes", "unchecked"})
         Codec<Map<String, Object>> codec = (Codec<Map<String, Object>>) (Codec) Bson.DEFAULT_CODEC_REGISTRY.get(Map.class);
         assertTrue(codec instanceof MapCodec);
-        MapCodec<Map<String, Object>> recordCodec = (MapCodec<Map<String, Object>>) codec;
+        MapCodec<String, Map<String, Object>> recordCodec = (MapCodec<String, Map<String, Object>>) codec;
         assertEquals(Map.class, recordCodec.getEncoderClass());
     }
 }

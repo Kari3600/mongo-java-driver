@@ -26,21 +26,21 @@ import java.util.Map;
  *
  * @since 3.5
  */
-class ParameterizedMapCodec<T, M extends Map<String, T>> extends AbstractMapCodec<T, M> {
-    private final Codec<T> codec;
+class ParameterizedMapCodec<K, V, M extends Map<K, V>> extends AbstractMapCodec<K, V, M> {
+    private final Codec<V> codec;
 
-    ParameterizedMapCodec(final Codec<T> codec, final Class<M> clazz) {
-        super(clazz);
+    ParameterizedMapCodec(final Codec<V> codec, final Class<K> keyClass, final Class<M> mapClass) {
+        super(keyClass, mapClass);
         this.codec = codec;
     }
 
     @Override
-    T readValue(final BsonReader reader, final DecoderContext decoderContext) {
+    V readValue(final BsonReader reader, final DecoderContext decoderContext) {
         return decoderContext.decodeWithChildContext(codec, reader);
     }
 
     @Override
-    void writeValue(final BsonWriter writer, final T value, final EncoderContext encoderContext) {
+    void writeValue(final BsonWriter writer, final V value, final EncoderContext encoderContext) {
         encoderContext.encodeWithChildContext(codec, writer, value);
     }
 }
