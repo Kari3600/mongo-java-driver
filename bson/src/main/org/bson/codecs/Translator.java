@@ -21,7 +21,7 @@ public interface Translator<I, O> {
     I decode(O output);
 
     static <T> Translator<T, T> identity() {
-        return new Translator<>() {
+        return new Translator<T, T>() {
 
             @Override
             public T encode(final T input) {
