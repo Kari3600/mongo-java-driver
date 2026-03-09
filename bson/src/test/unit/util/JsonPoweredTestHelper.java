@@ -84,9 +84,13 @@ public final class JsonPoweredTestHelper {
                 Files.walkFileTree(myPath, new SimpleFileVisitor<Path>() {
                     @Override
                     public FileVisitResult visitFile(final Path filePath, final BasicFileAttributes attrs) throws IOException {
-                        if (filePath.toString().endsWith(".json")) {
+                        String filePathString = filePath.toString();
+                        if (filePathString.endsWith(".json")) {
                             if (fileSystem == null) {
-                                files.add(getTestDocumentWithMetaData(filePath.toString().substring(filePath.toString().lastIndexOf(resourcePath))));
+                                if (filePathString.contains("\\")) {
+                                    filePathString = filePathString.replace("\\", "/");
+                                }
+                                files.add(getTestDocumentWithMetaData(filePathString.substring(filePathString.lastIndexOf(resourcePath))));
                             } else {
                                 files.add(getTestDocumentWithMetaData(filePath.toString()));
                             }
