@@ -30,6 +30,7 @@ import java.util.Objects;
 import static org.bson.assertions.Assertions.notNull;
 import static org.bson.codecs.BsonTypeClassMap.DEFAULT_BSON_TYPE_CLASS_MAP;
 import static org.bson.codecs.ContainerCodecHelper.getCodec;
+import static org.bson.codecs.ContainerCodecHelper.getTypeClass;
 
 /**
  * A {@code CodecProvider} for the Map class and all the default Codec implementations on which it depends.
@@ -90,16 +91,17 @@ public class MapCodecProvider implements CodecProvider {
             switch (typeArgumentsSize) {
                 case 0: {
                     @SuppressWarnings({"unchecked", "rawtypes"})
-                    Codec<T> result = new MapCodec(registry, bsonTypeClassMap, valueTransformer, clazz);
+                    Codec<T> result = new MapCodec(registry, bsonTypeClassMap, valueTransformer, String.class, clazz);
+                    return result;
+                }
+                case 1: {
+                    @SuppressWarnings({"unchecked", "rawtypes"})
+                    Codec<T> result = new MapCodec(registry, bsonTypeClassMap, valueTransformer, getTypeClass(typeArguments.get(0)), clazz);
                     return result;
                 }
                 case 2: {
-                    Type genericTypeOfMapKey = typeArguments.get(0);
-                    if (!genericTypeOfMapKey.getTypeName().equals("java.lang.String")) {
-                        throw new CodecConfigurationException("Unsupported key type for Map: " + genericTypeOfMapKey.getTypeName());
-                    }
                     @SuppressWarnings({"unchecked", "rawtypes"})
-                    Codec<T> result = new ParameterizedMapCodec(getCodec(registry, typeArguments.get(1)), clazz);
+                    Codec<T> result = new ParameterizedMapCodec(getCodec(registry, typeArguments.get(1)), getTypeClass(typeArguments.get(0)), clazz);
                     return result;
                 }
                 default: {

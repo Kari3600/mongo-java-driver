@@ -25,6 +25,7 @@ import javax.annotation.Nullable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.AbstractMap;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -33,25 +34,43 @@ import java.util.function.Supplier;
 
 import static java.lang.String.format;
 import static org.bson.assertions.Assertions.notNull;
+import static org.bson.internal.EnumCodecHelper.getEnumMap;
 
-abstract class AbstractMapCodec<T, M extends Map<String, T>> implements Codec<M> {
+abstract class AbstractMapCodec<K, V, M extends Map<K, V>> implements Codec<M> {
 
     private final Supplier<M> supplier;
-    private final Class<M> clazz;
+    private final Class<K> keyClass;
+    private final Class<M> mapClass;
+    private final Translator<K, String> translator;
 
     @SuppressWarnings({"unchecked", "UnnecessaryLocalVariable", "rawtypes"})
-    AbstractMapCodec(@Nullable final Class<M> clazz) {
-        this.clazz = notNull("clazz", clazz);
-        Class rawClass = clazz;
+    AbstractMapCodec(@Nullable final Class<K> keyClass, @Nullable final Class<M> mapClass) {
+        this.mapClass = notNull("mapClass", mapClass);
+        this.keyClass = notNull("keyClass", keyClass);
+        Class rawClass = mapClass;
         if (rawClass == Map.class || rawClass == AbstractMap.class || rawClass == HashMap.class) {
-            supplier = () -> (M) new HashMap<String, T>();
+            supplier = () -> (M) new HashMap<>();
+            translator = getAutoTranslator(keyClass);
         } else if (rawClass == NavigableMap.class || rawClass == TreeMap.class) {
-            supplier = () -> (M) new TreeMap<String, T>();
+            supplier = () -> (M) new TreeMap<>();
+            translator = getAutoTranslator(keyClass);
+        } else if (rawClass == EnumMap.class && Enum.class.isAssignableFrom(keyClass)) {
+            supplier = () -> (M) getEnumMap(keyClass);
+            translator = new Translator<K, String>() {
+                @Override
+                public String encode(final K input) {
+                    return ((Enum) input).name();
+                }
+                @Override
+                public K decode(final String output) {
+                    return (K) Enum.valueOf((Class<? extends Enum>) keyClass, output);
+                }
+            };
         } else {
             Constructor<? extends Map<?, ?>> constructor;
             Supplier<M> supplier;
             try {
-                constructor = clazz.getDeclaredConstructor();
+                constructor = mapClass.getDeclaredConstructor();
                 supplier = () -> {
                     try {
                         return (M) constructor.newInstance();
@@ -61,23 +80,55 @@ abstract class AbstractMapCodec<T, M extends Map<String, T>> implements Codec<M>
                 };
             } catch (NoSuchMethodException e) {
                 supplier = () -> {
-                    throw new CodecConfigurationException(format("Map class %s has no public no-args constructor", clazz), e);
+                    throw new CodecConfigurationException(format("Map class %s has no public no-args constructor", mapClass), e);
                 };
             }
             this.supplier = supplier;
+            translator = getAutoTranslator(keyClass);
         }
     }
 
-    abstract T readValue(BsonReader reader, DecoderContext decoderContext);
+    @SuppressWarnings("unchecked")
+    private Translator<K, String> getAutoTranslator(final Class<K> keyClass) {
+        if (keyClass == String.class) {
+            return (Translator<K, String>) Translator.<String>identity();
+        } else if (keyClass == Integer.class || keyClass == int.class) {
+            return new Translator<K, String>() {
+                @Override
+                public String encode(final K input) {
+                    return String.valueOf(input);
+                }
+                @Override
+                public K decode(final String output) {
+                    return (K) Integer.valueOf(output);
+                }
+            };
+        } else if (keyClass == Long.class || keyClass == long.class) {
+            return new Translator<K, String>() {
+                @Override
+                public String encode(final K input) {
+                    return String.valueOf(input);
+                }
+                @Override
+                public K decode(final String output) {
+                    return (K) Long.valueOf(output);
+                }
+            };
+        } else {
+            throw new CodecConfigurationException(format("Illegal map key class %s.", keyClass));
+        }
+    }
 
-    abstract void writeValue(BsonWriter writer, T value, EncoderContext encoderContext);
+    abstract V readValue(BsonReader reader, DecoderContext decoderContext);
+
+    abstract void writeValue(BsonWriter writer, V value, EncoderContext encoderContext);
 
     @Override
     public void encode(final BsonWriter writer, final M map, final EncoderContext encoderContext) {
         writer.writeStartDocument();
-        for (final Map.Entry<String, T> entry : map.entrySet()) {
-            writer.writeName(entry.getKey());
-            T value = entry.getValue();
+        for (final Map.Entry<K, V> entry : map.entrySet()) {
+            writer.writeName(translator.encode(entry.getKey()));
+            V value = entry.getValue();
             if (value == null) {
                 writer.writeNull();
             } else {
@@ -95,11 +146,12 @@ abstract class AbstractMapCodec<T, M extends Map<String, T>> implements Codec<M>
         reader.readStartDocument();
         while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
             String fieldName = reader.readName();
+            K keyName = translator.decode(fieldName);
             if (reader.getCurrentBsonType() == BsonType.NULL) {
                 reader.readNull();
-                map.put(fieldName, null);
+                map.put(keyName, null);
             } else {
-                map.put(fieldName, readValue(reader, decoderContext));
+                map.put(keyName, readValue(reader, decoderContext));
             }
         }
 
@@ -107,8 +159,12 @@ abstract class AbstractMapCodec<T, M extends Map<String, T>> implements Codec<M>
         return map;
     }
 
+    public Class<K> getKeyClass() {
+        return keyClass;
+    }
+
     @Override
     public Class<M> getEncoderClass() {
-        return clazz;
+        return mapClass;
     }
 }

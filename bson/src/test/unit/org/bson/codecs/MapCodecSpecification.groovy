@@ -33,6 +33,8 @@ import org.bson.BsonWriter
 import org.bson.ByteBufNIO
 import org.bson.Document
 import org.bson.codecs.jsr310.Jsr310CodecProvider
+import org.bson.conversions.Bson
+import org.bson.diagnostics.Logger
 import org.bson.io.BasicOutputBuffer
 import org.bson.io.ByteBufferBsonInput
 import org.bson.json.JsonReader
@@ -107,7 +109,8 @@ class MapCodecSpecification extends Specification {
         }
 
         when:
-        new MapCodec(REGISTRY, new BsonTypeClassMap(), null, Map).encode(writer, originalDocument, EncoderContext.builder().build())
+        new MapCodec(REGISTRY, new BsonTypeClassMap(), null, String, Map).encode(writer, originalDocument, EncoderContext.builder().
+                build())
         BsonReader reader
         if (writer instanceof BsonDocumentWriter) {
             reader = new BsonDocumentReader(bsonDoc)
@@ -118,7 +121,7 @@ class MapCodecSpecification extends Specification {
         } else {
             reader = new JsonReader(stringWriter.toString())
         }
-        def decodedDoc = new MapCodec(REGISTRY, new BsonTypeClassMap(), null, Map).decode(reader, DecoderContext.builder().build())
+        def decodedDoc = new MapCodec(REGISTRY, new BsonTypeClassMap(), null, String, Map).decode(reader, DecoderContext.builder().build())
 
         then:
         decodedDoc.get('null') == originalDocument.get('null')
@@ -177,7 +180,7 @@ class MapCodecSpecification extends Specification {
         def reader = new BsonBinaryReader(ByteBuffer.wrap(bytes as byte[]))
 
         when:
-        def map = new MapCodec(fromCodecs(new UuidCodec(representation), new BinaryCodec()), new BsonTypeClassMap(), null, Map)
+        def map = new MapCodec(fromCodecs(new UuidCodec(representation), new BinaryCodec()), new BsonTypeClassMap(), null, String, Map)
                 .withUuidRepresentation(representation)
                 .decode(reader, DecoderContext.builder().build())
 
@@ -200,7 +203,7 @@ class MapCodecSpecification extends Specification {
         def reader = new BsonBinaryReader(ByteBuffer.wrap(bytes as byte[]))
 
         when:
-        def map = new MapCodec(fromCodecs(new UuidCodec(representation), new BinaryCodec()), new BsonTypeClassMap(), null, Map)
+        def map = new MapCodec(fromCodecs(new UuidCodec(representation), new BinaryCodec()), new BsonTypeClassMap(), null, String, Map)
                 .withUuidRepresentation(representation)
                 .decode(reader, DecoderContext.builder().build())
 
@@ -221,7 +224,7 @@ class MapCodecSpecification extends Specification {
         given:
         def codec = new MapCodec(fromProviders([new ValueCodecProvider(), new DocumentCodecProvider(), new BsonValueCodecProvider()]),
                                       new BsonTypeClassMap(),
-                                      { Object value -> 5 }, Map)
+                                      { Object value -> 5 }, String, Map)
         when:
         def doc = codec.decode(new BsonDocumentReader(new BsonDocument('_id', new BsonInt32(1))), DecoderContext.builder().build())
 
@@ -234,7 +237,7 @@ class MapCodecSpecification extends Specification {
         def doc = new BsonDocument('_id', new BsonInt32(1))
 
         when:
-        def codec = new MapCodec(fromProviders([new ValueCodecProvider()]), new BsonTypeClassMap(), null, mapType)
+        def codec = new MapCodec(fromProviders([new ValueCodecProvider()]), new BsonTypeClassMap(), null, String, mapType)
         def map = codec.decode(new BsonDocumentReader(doc), DecoderContext.builder().build())
 
         then:
@@ -249,6 +252,22 @@ class MapCodecSpecification extends Specification {
         HashMap      | HashMap
         TreeMap      | TreeMap
         WeakHashMap  | WeakHashMap
+    }
+
+    def 'should decode to enum map when given enum map'() {
+        given:
+        def originalMap = new EnumMap<SimpleEnum,Integer>(SimpleEnum)
+        originalMap.put(SimpleEnum.BRAVO, 3)
+        def writer = new BsonDocumentWriter(new BsonDocument())
+        def reader = new BsonDocumentReader(writer.getDocument())
+        def codec = new ParameterizedMapCodec(new IntegerCodec(), SimpleEnum, EnumMap)
+
+        when:
+        def encoded = codec.encode(writer, originalMap, EncoderContext.builder().build())
+        def decoded = codec.decode(reader, DecoderContext.builder().build())
+
+        then:
+        decoded == originalMap
     }
 
 

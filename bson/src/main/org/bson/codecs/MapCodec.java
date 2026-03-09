@@ -37,7 +37,7 @@ import static org.bson.assertions.Assertions.notNull;
  * @param <M> the actual type of the Map, e.g. {@code NavigableMap<String, Object>}
  */
 @SuppressWarnings("rawtypes")
-final class MapCodec<M extends Map<String, Object>> extends AbstractMapCodec<Object, M>
+final class MapCodec<K, M extends Map<K, Object>> extends AbstractMapCodec<K, Object, M>
         implements OverridableUuidRepresentationCodec<M> {
 
     private final BsonTypeCodecMap bsonTypeCodecMap;
@@ -57,14 +57,14 @@ final class MapCodec<M extends Map<String, Object>> extends AbstractMapCodec<Obj
      * @since 4.8
      */
     MapCodec(final CodecRegistry registry, final BsonTypeClassMap bsonTypeClassMap, final Transformer valueTransformer,
-                      final Class<M> clazz) {
+                      final Class<K> keyClass, final Class<M> clazz) {
         this(registry, new BsonTypeCodecMap(notNull("bsonTypeClassMap", bsonTypeClassMap), registry), valueTransformer,
-                UuidRepresentation.UNSPECIFIED, clazz);
+                UuidRepresentation.UNSPECIFIED, keyClass, clazz);
     }
 
     private MapCodec(final CodecRegistry registry, final BsonTypeCodecMap bsonTypeCodecMap, final Transformer valueTransformer,
-                       final UuidRepresentation uuidRepresentation, final Class<M> clazz) {
-        super(clazz);
+                       final UuidRepresentation uuidRepresentation, final Class<K> keyClass, final Class<M> clazz) {
+        super(keyClass, clazz);
         this.registry = notNull("registry", registry);
         this.bsonTypeCodecMap = bsonTypeCodecMap;
         this.valueTransformer = valueTransformer != null ? valueTransformer : (value) -> value;
@@ -76,7 +76,7 @@ final class MapCodec<M extends Map<String, Object>> extends AbstractMapCodec<Obj
         if (this.uuidRepresentation.equals(uuidRepresentation)) {
             return this;
         }
-        return new MapCodec<>(registry, bsonTypeCodecMap, valueTransformer, uuidRepresentation, getEncoderClass());
+        return new MapCodec<>(registry, bsonTypeCodecMap, valueTransformer, uuidRepresentation, getKeyClass(), getEncoderClass());
     }
 
     @Override

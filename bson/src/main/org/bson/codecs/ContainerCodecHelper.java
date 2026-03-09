@@ -92,6 +92,16 @@ final class ContainerCodecHelper {
         return binaryTypeCodec;
     }
 
+    static Class<?> getTypeClass(final Type type) {
+        if (type instanceof Class) {
+            return (Class<?>) type;
+        } else if (type instanceof ParameterizedType) {
+            return (Class<?>) ((ParameterizedType) type).getRawType();
+        } else {
+            throw new CodecConfigurationException("Unsupported generic type of container: " + type);
+        }
+    }
+
     static Codec<?> getCodec(final CodecRegistry codecRegistry, final Type type) {
         if (type instanceof Class) {
             return codecRegistry.get((Class<?>) type);
