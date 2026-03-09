@@ -21,13 +21,19 @@ import org.bson.BsonWriter;
 import org.bson.codecs.Codec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.EncoderContext;
+import org.bson.codecs.Translator;
 import org.bson.codecs.configuration.CodecConfigurationException;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.function.Supplier;
 
 import static java.lang.String.format;
+import static org.bson.internal.EnumCodecHelper.getEnumMap;
 
 final class MapPropertyCodecProvider implements PropertyCodecProvider {
 
@@ -36,12 +42,8 @@ final class MapPropertyCodecProvider implements PropertyCodecProvider {
     public <T> Codec<T> get(final TypeWithTypeParameters<T> type, final PropertyCodecRegistry registry) {
         if (Map.class.isAssignableFrom(type.getType()) && type.getTypeParameters().size() == 2) {
             Class<?> keyType = type.getTypeParameters().get(0).getType();
-            if (!keyType.equals(String.class)) {
-                throw new CodecConfigurationException(format("Invalid Map type. Maps MUST have string keys, found %s instead.", keyType));
-            }
-
             try {
-                return new MapCodec(type.getType(), registry.get(type.getTypeParameters().get(1)));
+                return new MapCodec(keyType, type.getType(), registry.get(type.getTypeParameters().get(1)));
             } catch (CodecConfigurationException e) {
                 if (type.getTypeParameters().get(1).getType() == Object.class) {
                     try {
@@ -57,20 +59,26 @@ final class MapPropertyCodecProvider implements PropertyCodecProvider {
         }
     }
 
-    private static class MapCodec<T> implements Codec<Map<String, T>> {
-        private final Class<Map<String, T>> encoderClass;
-        private final Codec<T> codec;
+    private static class MapCodec<K, V> implements Codec<Map<K, V>> {
+        private final Class<K> keyClass;
+        private final Class<Map<K, V>> encoderClass;
+        private final Codec<V> codec;
+        private final Translator<K, String> translator;
+        private final Supplier<Map<K, V>> supplier;
 
-        MapCodec(final Class<Map<String, T>> encoderClass, final Codec<T> codec) {
+        MapCodec(final Class<K> keyClass, final Class<Map<K, V>> encoderClass, final Codec<V> codec) {
+            this.keyClass = keyClass;
             this.encoderClass = encoderClass;
             this.codec = codec;
+            this.translator = getTranslator();
+            this.supplier = getSupplier();
         }
 
         @Override
-        public void encode(final BsonWriter writer, final Map<String, T> map, final EncoderContext encoderContext) {
+        public void encode(final BsonWriter writer, final Map<K, V> map, final EncoderContext encoderContext) {
             writer.writeStartDocument();
-            for (final Entry<String, T> entry : map.entrySet()) {
-                writer.writeName(entry.getKey());
+            for (final Entry<K, V> entry : map.entrySet()) {
+                writer.writeName(translator.encode(entry.getKey()));
                 if (entry.getValue() == null) {
                     writer.writeNull();
                 } else {
@@ -81,15 +89,16 @@ final class MapPropertyCodecProvider implements PropertyCodecProvider {
         }
 
         @Override
-        public Map<String, T> decode(final BsonReader reader, final DecoderContext context) {
+        public Map<K, V> decode(final BsonReader reader, final DecoderContext context) {
             reader.readStartDocument();
-            Map<String, T> map = getInstance();
+            Map<K, V> map = supplier.get();
             while (reader.readBsonType() != BsonType.END_OF_DOCUMENT) {
+                K key = translator.decode(reader.readName());
                 if (reader.getCurrentBsonType() == BsonType.NULL) {
-                    map.put(reader.readName(), null);
+                    map.put(key, null);
                     reader.readNull();
                 } else {
-                    map.put(reader.readName(), codec.decode(reader, context));
+                    map.put(key, codec.decode(reader, context));
                 }
             }
             reader.readEndDocument();
@@ -97,18 +106,71 @@ final class MapPropertyCodecProvider implements PropertyCodecProvider {
         }
 
         @Override
-        public Class<Map<String, T>> getEncoderClass() {
+        public Class<Map<K, V>> getEncoderClass() {
             return encoderClass;
         }
 
-        private Map<String, T> getInstance() {
+        private Supplier<Map<K, V>> getSupplier() {
             if (encoderClass.isInterface()) {
-                return new HashMap<>();
+                return () -> new HashMap<>();
+            }
+            if (EnumMap.class.isAssignableFrom(encoderClass)) {
+                return () -> (Map<K, V>) getEnumMap(keyClass);
             }
             try {
-                return encoderClass.getDeclaredConstructor().newInstance();
-            } catch (Exception e) {
-                throw new CodecConfigurationException(e.getMessage(), e);
+                Constructor<? extends Map<K, V>> constructor = encoderClass.getDeclaredConstructor();
+                return () -> {
+                    try {
+                        return (Map<K, V>) constructor.newInstance();
+                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                        throw new CodecConfigurationException("Can not invoke no-args constructor for Map class %s", e);
+                    }
+                };
+            } catch (NoSuchMethodException e) {
+                return  () -> {
+                    throw new CodecConfigurationException(format("Map class %s has no public no-args constructor", encoderClass), e);
+                };
+            }
+        }
+
+        private Translator<K, String> getTranslator() {
+            if (keyClass == String.class) {
+                return (Translator<K, String>) Translator.<String>identity();
+            } else if (keyClass == Integer.class || keyClass == int.class) {
+                return new Translator<K, String>() {
+                    @Override
+                    public String encode(final K input) {
+                        return String.valueOf(input);
+                    }
+                    @Override
+                    public K decode(final String output) {
+                        return (K) Integer.valueOf(output);
+                    }
+                };
+            } else if (keyClass == Long.class || keyClass == long.class) {
+                return new Translator<K, String>() {
+                    @Override
+                    public String encode(final K input) {
+                        return String.valueOf(input);
+                    }
+                    @Override
+                    public K decode(final String output) {
+                        return (K) Long.valueOf(output);
+                    }
+                };
+            } else if (keyClass.isEnum()) {
+                return new Translator<K, String>() {
+                    @Override
+                    public String encode(final K input) {
+                        return ((Enum) input).name();
+                    }
+                    @Override
+                    public K decode(final String output) {
+                        return (K) Enum.valueOf((Class<? extends Enum>) keyClass, output);
+                    }
+                };
+            } else {
+                throw new CodecConfigurationException(format("Illegal map key class %s.", keyClass));
             }
         }
     }

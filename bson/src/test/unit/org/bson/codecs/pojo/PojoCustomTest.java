@@ -23,6 +23,7 @@ import org.bson.codecs.BsonValueCodecProvider;
 import org.bson.codecs.Codec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.EncoderContext;
+import org.bson.codecs.IntegerCodec;
 import org.bson.codecs.IterableCodecProvider;
 import org.bson.codecs.LongCodec;
 import org.bson.codecs.MapCodecProvider;
@@ -46,6 +47,7 @@ import org.bson.codecs.pojo.entities.ConstructorNotPublicModel;
 import org.bson.codecs.pojo.entities.ConventionModel;
 import org.bson.codecs.pojo.entities.ConverterModel;
 import org.bson.codecs.pojo.entities.CustomPropertyCodecOptionalModel;
+import org.bson.codecs.pojo.entities.EnumMapModel;
 import org.bson.codecs.pojo.entities.GenericBaseModel;
 import org.bson.codecs.pojo.entities.GenericHolderModel;
 import org.bson.codecs.pojo.entities.GenericTreeModel;
@@ -93,6 +95,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -484,6 +487,16 @@ public final class PojoCustomTest extends PojoTestCase {
                 fromProviders(getPojoCodecProviderBuilder(MapStringObjectModel.class).build()));
         assertThrows(UnsupportedOperationException.class, () ->
                 roundTrip(registry, model, "{ map: {a : 1, b: 'b', c: [1, 2, 3]}}"));
+    }
+
+    @Test
+    public void testEnumMapModelObjectCodec() {
+        EnumMapModel model = new EnumMapModel(new EnumMap<SimpleEnum,Integer>(SimpleEnum.class){{
+            put(SimpleEnum.BRAVO, 3);
+        }});
+        CodecRegistry registry = fromRegistries(fromProviders(new MapCodecProvider()), fromCodecs(new IntegerCodec()),
+                fromProviders(getPojoCodecProviderBuilder(EnumMapModel.class).build()));
+        roundTrip(registry, model, "{ values: {BRAVO : 3}}");
     }
 
     @Test
