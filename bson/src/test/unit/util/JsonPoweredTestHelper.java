@@ -40,6 +40,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public final class JsonPoweredTestHelper {
 
@@ -84,12 +86,11 @@ public final class JsonPoweredTestHelper {
                 Files.walkFileTree(myPath, new SimpleFileVisitor<Path>() {
                     @Override
                     public FileVisitResult visitFile(final Path filePath, final BasicFileAttributes attrs) throws IOException {
-                        String filePathString = filePath.toString();
+                        String filePathString = StreamSupport.stream(myPath.spliterator(), false)
+                                .map(Path::toString)
+                                .collect(Collectors.joining("/"));
                         if (filePathString.endsWith(".json")) {
                             if (fileSystem == null) {
-                                if (filePathString.contains("\\")) {
-                                    filePathString = filePathString.replace("\\", "/");
-                                }
                                 files.add(getTestDocumentWithMetaData(filePathString.substring(filePathString.lastIndexOf(resourcePath))));
                             } else {
                                 files.add(getTestDocumentWithMetaData(filePath.toString()));
