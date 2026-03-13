@@ -86,14 +86,14 @@ public final class JsonPoweredTestHelper {
                 Files.walkFileTree(myPath, new SimpleFileVisitor<Path>() {
                     @Override
                     public FileVisitResult visitFile(final Path filePath, final BasicFileAttributes attrs) throws IOException {
-                        String filePathString = StreamSupport.stream(myPath.spliterator(), false)
+                        String filePathString = StreamSupport.stream(filePath.spliterator(), false)
                                 .map(Path::toString)
                                 .collect(Collectors.joining("/"));
                         if (filePathString.endsWith(".json")) {
                             if (fileSystem == null) {
                                 files.add(getTestDocumentWithMetaData(filePathString.substring(filePathString.lastIndexOf(resourcePath))));
                             } else {
-                                files.add(getTestDocumentWithMetaData(filePath.toString()));
+                                files.add(getTestDocumentWithMetaData(filePathString));
                             }
                         }
                         return super.visitFile(filePath, attrs);
